@@ -2,10 +2,10 @@
 
 Do two models of dopamine learning react differently to good and bad outcomes as mood changes?
 
-`code/models.py` has Python versions of the two models from Qian, Burrell et al. (2025), ported from their MATLAB code (Dryad, doi:10.5061/dryad.mkkwh71f6):
+The two models from Qian, Burrell et al. (2025), ported to Python from their MATLAB code (Dryad, doi:10.5061/dryad.mkkwh71f6):
 
-- **Belief-state TD** (`td_belief.m`, original author S. J. Gershman)
-- **ANCCR** (`calculateANCCRperformance.m`, from github.com/namboodirilab/ANCCR)
+- **Belief-state TD** in `code/td_model.py` (from `td_belief.m`, original author S. J. Gershman)
+- **ANCCR** in `code/anccr_model.py` (from `calculateANCCRperformance.m`, github.com/namboodirilab/ANCCR)
 
 The only change to the maths is a mood dial: separate learning rates for good and bad outcomes. Set them equal and you get the original models.
 
