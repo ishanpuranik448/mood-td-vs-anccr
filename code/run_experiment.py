@@ -1,6 +1,6 @@
 """
 Two-button reversal task across an 11-point mood dial, for the two models
-from Qian, Burrell et al. (2025) in models.py.
+from Qian, Burrell et al. (2025) in td_model.py and anccr_model.py.
 
 Task (from the draft's Experimental Design):
   - 100 baseline trials, then the two buttons' reward probabilities swap,
@@ -29,7 +29,8 @@ for a quick test.
 """
 import json, os
 import numpy as np
-from models import BeliefTD, ANCCR
+from td_model import BeliefTD
+from anccr_model import ANCCR
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 
