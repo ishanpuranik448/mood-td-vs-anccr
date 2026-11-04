@@ -15,6 +15,8 @@ Mood dial: m = -5 ... +5. alpha_minus / alpha_plus = 4 ** (-m / 5), so m = -5
 learns 4x more from bad outcomes and m = +5 learns 4x more from good ones.
 The two rates always add up to 0.2 (the PoC table: 0.04 to 0.16), for both
 models, so m = 0 gives 0.1 for each.
+The first 100 trials (before the swap) always run at neutral mood (m = 0);
+the mood rates switch on at the swap, as in the PoC.
 
 Choice rule (not part of the originals, which have no choices):
   BeliefTD: value of pressing a button = learned value of the belief the
@@ -103,9 +105,11 @@ def td_task_model(pair):
 
 def run_belief_td(ratio, pair, rng):
     ap, am = split_rates(TD_ALPHA, ratio)
-    agent = BeliefTD(*td_task_model(pair), ap, am, TD_GAMMA)
+    agent = BeliefTD(*td_task_model(pair), TD_ALPHA, TD_ALPHA, TD_GAMMA)  # neutral
     rec = dict(choice=[], reward=[], da=[])
     for t in range(N_TRIALS):
+        if t == N_BASE:                          # swap: mood switches on
+            agent.ap, agent.am = ap, am
         q = [agent.value(agent.belief_after(PRESS1 + b)[0]) for b in (0, 1)]
         a = softmax_pick(q, TD_BETA, rng)
         agent.step(PRESS1 + a, 0.0)
@@ -128,11 +132,13 @@ def run_anccr(ratio, pair, rng):
     T = p['Tratio'] * trial_len / max(np.mean(pair), 1e-3)
     arp, arm = split_rates(p['alpha_r'], ratio)
     agent = ANCCR(4, T, p['alpha'], p['k'], SAMPLING, p['w'], p['threshold'],
-                  MIN_RATE, beta=[0, 0, 1, 0], alpha_r_plus=arp, alpha_r_minus=arm,
-                  omidx=[A_OMIT, A_REWARD])
+                  MIN_RATE, beta=[0, 0, 1, 0], alpha_r_plus=p['alpha_r'],
+                  alpha_r_minus=p['alpha_r'], omidx=[A_OMIT, A_REWARD])  # neutral
     rec = dict(choice=[], reward=[], da=[])
     now = 0.0
     for t in range(N_TRIALS):
+        if t == N_BASE:                          # swap: mood switches on
+            agent.arp, agent.arm = min(arp, 1), min(arm, 1)
         q = [agent.NC[b, A_REWARD] * agent.R[b, A_REWARD] for b in (0, 1)]
         a = softmax_pick(q, ANCCR_BETA, rng)
         agent.step(A_PRESS1 + a, now, 0.0)
