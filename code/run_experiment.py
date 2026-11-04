@@ -13,8 +13,8 @@ Task (from the draft's Experimental Design):
 
 Mood dial: m = -5 ... +5. alpha_minus / alpha_plus = 4 ** (-m / 5), so m = -5
 learns 4x more from bad outcomes and m = +5 learns 4x more from good ones.
-The two rates average to the model's original single rate, so m = 0 is the
-original model.
+The two rates always add up to 0.2 (the PoC table: 0.04 to 0.16), for both
+models, so m = 0 gives 0.1 for each.
 
 Choice rule (not part of the originals, which have no choices):
   BeliefTD: value of pressing a button = learned value of the belief the
@@ -48,7 +48,8 @@ TD_ALPHA, TD_GAMMA, TD_BETA = 0.1, 0.9, 5.0
 HAZARD = 1 / N_TRIALS                        # assumed swap rate, as if estimated from the task
 
 # ---- ANCCR settings (each value is from the original's parameter grid) ----
-ANCCR_PARAMS = dict(Tratio=1.2, alpha=0.05, k=0.05, w=0.5, threshold=0.3, alpha_r=0.2)
+# alpha_r = 0.1 (not the original's 0.2) so alpha_plus + alpha_minus = 0.2, as in the PoC table
+ANCCR_PARAMS = dict(Tratio=1.2, alpha=0.05, k=0.05, w=0.5, threshold=0.3, alpha_r=0.1)
 ANCCR_BETA = 10.0
 SAMPLING, MIN_RATE = 0.2, 0.001              # as in run_anccr_model.m
 
