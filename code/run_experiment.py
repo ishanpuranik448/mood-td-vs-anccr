@@ -21,8 +21,9 @@ the mood rates switch on at the swap, as in the PoC.
 Choice rule (not part of the originals, which have no choices):
   BeliefTD: value of pressing a button = learned value of the belief the
             agent would have after pressing it.
-  ANCCR:    value of pressing a button = net contingency between that button
-            and reward, times the reward value it predicts (NC * R).
+  ANCCR:    value of pressing a button = (net contingency between that button
+            and reward minus net contingency between it and a missed reward)
+            times the reward value it predicts: R * (NC_reward - NC_miss).
   Both use a softmax.
 
 Run:  py run_experiment.py
@@ -49,9 +50,15 @@ RATIOS = 4.0 ** (-MOOD / 5)                  # alpha_minus / alpha_plus
 TD_ALPHA, TD_GAMMA, TD_BETA = 0.1, 0.9, 5.0
 HAZARD = 1 / N_TRIALS                        # assumed swap rate, as if estimated from the task
 
-# ---- ANCCR settings (each value is from the original's parameter grid) ----
-# alpha_r = 0.1 (not the original's 0.2) so alpha_plus + alpha_minus = 0.2, as in the PoC table
-ANCCR_PARAMS = dict(Tratio=1.2, alpha=0.05, k=0.05, w=0.5, threshold=0.3, alpha_r=0.1)
+# ---- ANCCR settings (from the original's parameter grid unless noted) ----
+# alpha = 0.1 (the original grid used 0.05) is the contingency ("link") learning
+# rate; mood splits it so alpha_plus + alpha_minus = 0.2, as in the PoC table.
+# alpha_r is the reward-value ("worth") rate; it has no mood split.
+ANCCR_PARAMS = dict(alpha=0.1, k=0.05, w=0.5, threshold=0.3, alpha_r=0.1)
+# Memory window T (seconds). The original sets T = 1.2 x mean time between
+# rewards, which here is 2-5 trials long, so a reward gets credited to presses
+# of both buttons. We set T to about one trial instead.
+ANCCR_T = CUE_REWARD_DELAY + 6.5
 ANCCR_BETA = 10.0
 SAMPLING, MIN_RATE = 0.2, 0.001              # as in run_anccr_model.m
 
@@ -126,20 +133,20 @@ A_PRESS1, A_PRESS2, A_REWARD, A_OMIT = range(4)
 
 def run_anccr(ratio, pair, rng):
     p = ANCCR_PARAMS
-    # T = mean inter-reward interval x Tratio (as in run_anccr_model.m), using
-    # the interval expected when choosing at random
-    trial_len = CUE_REWARD_DELAY + 6.5
-    T = p['Tratio'] * trial_len / max(np.mean(pair), 1e-3)
-    arp, arm = split_rates(p['alpha_r'], ratio)
-    agent = ANCCR(4, T, p['alpha'], p['k'], SAMPLING, p['w'], p['threshold'],
+    ap, am = split_rates(p['alpha'], ratio)
+    agent = ANCCR(4, ANCCR_T, p['alpha'], p['k'], SAMPLING, p['w'], p['threshold'],
                   MIN_RATE, beta=[0, 0, 1, 0], alpha_r_plus=p['alpha_r'],
                   alpha_r_minus=p['alpha_r'], omidx=[A_OMIT, A_REWARD])  # neutral
+    # In this task a missed reward always means something, so misses count
+    # from the first trial (the original waits until reward has a known cause).
+    agent.omtrue[:] = True
     rec = dict(choice=[], reward=[], da=[])
     now = 0.0
     for t in range(N_TRIALS):
         if t == N_BASE:                          # swap: mood switches on
-            agent.arp, agent.arm = min(arp, 1), min(arm, 1)
-        q = [agent.NC[b, A_REWARD] * agent.R[b, A_REWARD] for b in (0, 1)]
+            agent.ap, agent.am = ap, am
+        q = [agent.R[b, A_REWARD] * (agent.NC[b, A_REWARD] - agent.NC[b, A_OMIT])
+             for b in (0, 1)]
         a = softmax_pick(q, ANCCR_BETA, rng)
         agent.step(A_PRESS1 + a, now, 0.0)
         now += CUE_REWARD_DELAY

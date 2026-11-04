@@ -10,10 +10,14 @@ The original reads a whole event log in one go. This version takes one event
 at a time, so an agent can choose between buttons while it learns. The update
 equations follow the original line by line.
 
-The one change to the maths is the mood dial: alpha_r_plus / alpha_r_minus in
-the reward-value update, which the original already splits into a positive-DA
-rule and a negative-DA ("overprediction") rule. Set them equal to get the
-original model back.
+The one change to the maths is the mood dial: separate learning rates for the
+contingency ("link") update, alpha_plus when a reward arrives and alpha_minus
+when a reward is missed (an omission event). Every other event uses alpha.
+Set alpha_plus = alpha_minus = alpha to get the original model back.
+
+(alpha_r_plus / alpha_r_minus split the reward-value ("worth") update. That
+had no effect here because every reward is worth 1, so the experiment now
+keeps them equal.)
 """
 import numpy as np
 
@@ -26,11 +30,15 @@ class ANCCR:
     """
 
     def __init__(self, nstimuli, T, alpha, k, samplinginterval, w, threshold,
-                 minimumrate, beta, alpha_r_plus, alpha_r_minus, omidx=None):
+                 minimumrate, beta, alpha_r_plus, alpha_r_minus, omidx=None,
+                 alpha_plus=None, alpha_minus=None):
         n = nstimuli
         self.n, self.T = n, T
         self.gamma = np.exp(-1 / T)
         self.alpha = alpha
+        # mood dial on the contingency update (None = same as alpha)
+        self.ap = alpha if alpha_plus is None else alpha_plus
+        self.am = alpha if alpha_minus is None else alpha_minus
         self.k = 1 / T if np.isnan(k) else k
         self.dt = samplinginterval
         self.w, self.threshold, self.minimumrate = w, threshold, minimumrate
@@ -89,7 +97,13 @@ class ANCCR:
     def _event(self, e, t, mag):
         n = self.n
         self.numevents[e] += 1
-        a = self.alpha
+        # mood dial: alpha_plus at a reward, alpha_minus at a missed reward
+        if (self.omidx[:, 1] == e).any():
+            a = self.ap
+        elif (self.omidx[:, 0] == e).any():
+            a = self.am
+        else:
+            a = self.alpha
         A = np.zeros((n, n))
         if self.t_last is not None:
             decay = self.gamma ** (t - self.t_last)
@@ -137,7 +151,7 @@ class ANCCR:
             self.Imct[e] = True
         self.Imct[e] = self.Imct[e] or DA + self.beta[e] > self.threshold
 
-        # reward value update (mood dial: separate rates for the two rules)
+        # reward value update (positive-DA and negative-DA rules)
         if DA >= 0:
             self.R[:, e] += self.arp * (mag - self.R[:, e])
         elif Iedge.any():
