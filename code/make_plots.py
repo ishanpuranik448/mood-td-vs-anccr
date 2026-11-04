@@ -2,6 +2,7 @@
 Makes the three figures from results.json (written by run_experiment.py).
 
   fig1_switching.png  trials to switch after the swap vs mood, one panel per pair
+                      (error bars = standard error over runs)
   fig2_dopamine.png   average |DA| on rewarded (solid) and missed (dashed) trials
   fig3_best_mood.png  the mood that switches fastest, per pair, for each model
 
@@ -75,8 +76,8 @@ handles = []
 for ax, pair in zip(axs, PAIRS):
     for model, (label, col) in MODELS.items():
         m, se = series(pair, model, 'adapt')
-        ax.fill_between(MOOD, m - se, m + se, color=col, alpha=0.15, lw=0)
-        h, = ax.plot(MOOD, m, color=col, lw=2, marker='o', ms=4, label=label)
+        h = ax.errorbar(MOOD, m, yerr=se, color=col, lw=2, marker='o', ms=4,
+                        elinewidth=1.2, capsize=3, capthick=1.2, label=label)
         if pair == PAIRS[0]:
             handles.append(h)
 finish(fig, axs, 'trials to switch', 'fig1_switching.png', handles)
@@ -89,9 +90,9 @@ for ax, pair in zip(axs, PAIRS):
     for model, (label, col) in MODELS.items():
         for key, ls, kind in (('da_good', '-', 'reward'), ('da_bad', '--', 'miss')):
             m, se = series(pair, model, key)
-            ax.fill_between(MOOD, m - se, m + se, color=col, alpha=0.15, lw=0)
-            h, = ax.plot(MOOD, m, color=col, lw=2, ls=ls, marker='o', ms=3.5,
-                         label=f'{label}, {kind}')
+            h = ax.errorbar(MOOD, m, yerr=se, color=col, lw=2, ls=ls, marker='o',
+                            ms=3.5, elinewidth=1.2, capsize=3, capthick=1.2,
+                            label=f'{label}, {kind}')
             if pair == PAIRS[0]:
                 handles.append(h)
 finish(fig, axs, '|DA|', 'fig2_dopamine.png', handles)
