@@ -1,20 +1,74 @@
-# Mood, belief-state TD and ANCCR
+# Mood and two dopamine models: TD vs ANCCR
 
-Do two models of dopamine learning react differently to good and bad outcomes as mood changes?
+**Question:** when mood goes from low to high, how differently do two models of dopamine learning (TD and ANCCR) react to good and bad surprises?
 
-The two models from Qian, Burrell et al. (2025), ported to Python from their MATLAB code (Dryad, doi:10.5061/dryad.mkkwh71f6):
+This repo has the code, results and figures for our simulation study. There is no human or animal data, only simulated agents.
 
-- **Belief-state TD** in `code/td_model.py` (from `td_belief.m`, original author S. J. Gershman)
-- **ANCCR** in `code/anccr_model.py` (from `calculateANCCRperformance.m`, github.com/namboodirilab/ANCCR)
+## What the experiment does
 
-The only change to the maths is a mood dial: separate learning rates for good and bad outcomes. Set them equal and you get the original models.
+- **Task.** There are two buttons, and each one gives a reward with its own chance. After 100 trials the two chances secretly swap, and the model gets 100 more trials to notice and switch.
+- **Reward pairs.** We use six pairs (% chance of reward): 0/50, 10/60, 20/70, 30/80, 40/90 and 50/100. The gap is always 50 points, so only how common rewards are changes.
+- **Mood.** Mood goes from −5 (very sad) to +5 (very happy). It sets how much the model learns from bad surprises compared with good ones: α− / α+ = 4^(−m/5). The two rates always add up to 0.2. Mood turns on at the swap; the first 100 trials are at neutral mood.
+- **Runs.** Each model runs 50 times at every mood and pair. That is 2 models × 11 moods × 6 pairs × 50 runs = 6,600 simulated agents.
 
-`code/run_experiment.py` runs both models on a two-button reversal task: 100 trials, a swap, then 100 more, for six probability pairs and 11 mood levels (-5 to +5).
+## The two models
 
-## Run it
+Both models are translated from MATLAB to Python, starting from the code for Qian et al. (2025):
+
+- **Belief-state TD** (`code/td_model.py`), from `td_belief.m` (original author S. J. Gershman). TD learns by comparing the reward it got with the reward it expected. The belief-state version also keeps a guess about whether the buttons have swapped.
+- **ANCCR** (`code/anccr_model.py`), from `calculateANCCRperformance.m`, which is a faster copy of the official ANCCR code by Jeong et al. (2022). ANCCR looks back after each reward and works out what caused it.
+
+### What we changed
+
+**TD:** the only change is mood. It uses α+ for positive surprises and α− for negative ones, instead of one learning rate. With α+ = α− you get the original model back.
+
+**ANCCR:** the original model was built for animals watching cues, so it needed a few changes for a button task:
+
+1. **Mood is on the "link"** (how strongly a button leads to reward). The link uses α+ when a press is rewarded and α− when it is not. Mood does not change how much a reward is worth.
+2. **Shorter memory window**, about one trial (9.9 s). The original window covered several trials, so a reward got credited to both buttons.
+3. **Misses count from trial 1.** In the original, misses only count once the model has learned what causes a reward.
+4. **A way to choose buttons.** We define button value = reward worth × (link to reward − link to miss), then pick a button with a softmax rule.
+
+We also raised ANCCR's link learning rate from 0.05 to 0.1 so both models learn at the same overall speed, and used β = 10 for ANCCR's choices (TD uses 5) because ANCCR's button values are much closer together. All the settings are at the top of `code/run_experiment.py`, with comments.
+
+## How to run it
+
+You need Python 3 (we used 3.13).
 
 ```
 py -m pip install -r requirements.txt
 cd code
 py run_experiment.py
+py make_plots.py
 ```
+
+On Mac or Linux, type `python3` instead of `py`.
+
+- `run_experiment.py` runs everything and saves `code/results.json`. It takes about 6 to 8 minutes. For a quick test, set `N_RUNS = 5`.
+- `make_plots.py` reads `results.json` and saves four figures in `figures/`.
+
+Every run has its own fixed random seed, so you get the same numbers each time. Run k uses the same seed at every mood, so moods can be compared run by run.
+
+## What's in the folders
+
+| File | What it is |
+|---|---|
+| `code/td_model.py` | Belief-state TD model |
+| `code/anccr_model.py` | ANCCR model |
+| `code/run_experiment.py` | The task, the settings, and the full experiment |
+| `code/make_plots.py` | Makes the four figures |
+| `code/results.json` | Results: averages plus every run's values |
+| `figures/fig1_switching.png` | Trials to switch after the swap, for each mood |
+| `figures/fig2_dopamine.png` | Size of the dopamine signal on rewarded and missed trials |
+| `figures/fig3_best_mood.png` | The fastest mood for each model and reward pair |
+| `figures/fig4_vs_neutral.png` | Change in trials to switch compared with neutral mood (main figure) |
+
+Shaded bands and bars in the figures are 95% confidence intervals. We get them by re-picking the 50 runs at random 2,000 times.
+
+## Credits and licence
+
+- The model code is translated from the code for Qian, L., et al. (2025), *Prospective contingency explains behavior and dopamine signals during associative learning*, Nature Neuroscience. That code is on Dryad: doi:10.5061/dryad.mkkwh71f6.
+- ANCCR is from Jeong, H., et al. (2022), *Mesolimbic dopamine release conveys causal associations*, Science, 378, eabq6740. The official code is at github.com/namboodirilab/ANCCR.
+- Belief-state TD is based on `td_belief.m` by S. J. Gershman.
+
+The MIT licence in `LICENSE` covers our own code and changes. The translated parts still belong to their original authors, so please cite them if you use this code.

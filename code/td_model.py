@@ -1,17 +1,17 @@
 """
-Belief-state TD, ported to Python from td_belief.m (original author
-S. J. Gershman) in the code for Qian, Burrell et al. (2025), "Prospective
-contingency explains behavior and dopamine signals during associative
-learning", Nature Neuroscience. Original MATLAB code: Dryad,
-doi:10.5061/dryad.mkkwh71f6 (Code.zip, matlab_simulation_code/).
+Belief-state TD, translated from MATLAB to Python. The source is td_belief.m
+(original author S. J. Gershman) in the code for Qian et al. (2025),
+"Prospective contingency explains behavior and dopamine signals during
+associative learning", Nature Neuroscience (Dryad, doi:10.5061/dryad.mkkwh71f6,
+Code.zip, matlab_simulation_code/).
 
-The original reads a whole event log in one go. This version takes one event
-at a time, so an agent can choose between buttons while it learns. The update
+The original reads a whole list of events at once. This version takes one
+event at a time, so the model can choose a button while it learns. The update
 equations follow the original line by line.
 
-The one change to the maths is the mood dial: alpha_plus for positive RPEs and
-alpha_minus for negative RPEs, instead of one alpha. Set them equal to get the
-original model back.
+The only change to the maths is mood: alpha_plus is used when the surprise is
+positive (better than expected) and alpha_minus when it is negative (worse than
+expected), instead of one alpha. Set them equal to get the original model back.
 """
 import numpy as np
 

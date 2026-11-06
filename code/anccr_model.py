@@ -1,23 +1,25 @@
 """
-ANCCR (Adjusted Net Contingency for Causal Relations), ported to Python from
-useful_functions/calculateANCCRperformance.m in the code for Qian, Burrell et
-al. (2025), "Prospective contingency explains behavior and dopamine signals
-during associative learning", Nature Neuroscience. That file is the official
-ANCCR code (github.com/namboodirilab/ANCCR) with speed changes. Original
-MATLAB code: Dryad, doi:10.5061/dryad.mkkwh71f6 (Code.zip).
+ANCCR (Adjusted Net Contingency for Causal Relations), Jeong et al. (2022).
 
-The original reads a whole event log in one go. This version takes one event
-at a time, so an agent can choose between buttons while it learns. The update
+Translated from MATLAB to Python. The source is
+useful_functions/calculateANCCRperformance.m in the code for Qian et al. (2025),
+"Prospective contingency explains behavior and dopamine signals during
+associative learning", Nature Neuroscience (Dryad, doi:10.5061/dryad.mkkwh71f6).
+That file is a faster copy of the official ANCCR code
+(github.com/namboodirilab/ANCCR).
+
+The original reads a whole list of events at once. This version takes one
+event at a time, so the model can choose a button while it learns. The update
 equations follow the original line by line.
 
-The one change to the maths is the mood dial: separate learning rates for the
-contingency ("link") update, alpha_plus when a reward arrives and alpha_minus
-when a reward is missed (an omission event). Every other event uses alpha.
-Set alpha_plus = alpha_minus = alpha to get the original model back.
+The only change to the maths here is mood: the "link" (contingency) update
+uses alpha_plus when a reward arrives and alpha_minus when a reward is missed.
+Every other event uses alpha. Set alpha_plus = alpha_minus = alpha to get the
+original model back.
 
-(alpha_r_plus / alpha_r_minus split the reward-value ("worth") update. That
-had no effect here because every reward is worth 1, so the experiment now
-keeps them equal.)
+The other changes for our button task (a shorter memory window, misses that
+count from trial 1, and a way to choose buttons) are set up in
+run_experiment.py, not here.
 """
 import numpy as np
 

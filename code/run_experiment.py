@@ -1,34 +1,40 @@
 """
-Two-button reversal task across an 11-point mood dial, for the two models
-from Qian, Burrell et al. (2025) in td_model.py and anccr_model.py.
+Runs the whole experiment and saves the results to results.json.
 
-Task (from the draft's Experimental Design):
-  - 100 baseline trials, then the two buttons' reward probabilities swap,
-    then 100 more trials.
-  - Six probability pairs: (0, 50), (50, 100), (10, 60), (20, 70), (30, 80),
-    (40, 90) percent. Button 1 starts as the better one.
-  - Each trial: press a button (time 0), outcome 3.4 s later (the cue-reward
-    delay in the original simulations), then an inter-trial interval drawn
-    the same way as the original (exponential, mean 6 s, kept within 4-10 s).
+The task
+  - Two buttons. Each one gives a reward with its own chance.
+  - 100 trials, then the two chances secretly swap, then 100 more trials.
+    Button 1 is the better one at the start.
+  - Six pairs of chances (percent): 0/50, 10/60, 20/70, 30/80, 40/90, 50/100.
+    The gap is always 50 points, so only how common rewards are changes.
+  - Each trial: the model presses a button, the reward (if any) comes 3.4 s
+    later, then there is a 4 to 10 s wait (about 6.5 s on average), drawn the
+    same way as in the original simulations.
 
-Mood dial: m = -5 ... +5. alpha_minus / alpha_plus = 4 ** (-m / 5), so m = -5
-learns 4x more from bad outcomes and m = +5 learns 4x more from good ones.
-The two rates always add up to 0.2 (the PoC table: 0.04 to 0.16), for both
-models, so m = 0 gives 0.1 for each.
-The first 100 trials (before the swap) always run at neutral mood (m = 0);
-the mood rates switch on at the swap, as in the PoC.
+Mood
+  - Mood m goes from -5 (very sad) to +5 (very happy).
+  - It sets the balance between learning from bad surprises (alpha_minus) and
+    good surprises (alpha_plus): alpha_minus / alpha_plus = 4 ** (-m / 5).
+    So m = -5 learns 4x more from bad surprises, m = +5 4x more from good ones.
+  - The two rates always add up to 0.2, so m = 0 gives 0.1 each.
+  - The first 100 trials are always at neutral mood. Mood turns on at the swap.
 
-Choice rule (not part of the originals, which have no choices):
-  BeliefTD: value of pressing a button = learned value of the belief the
-            agent would have after pressing it.
-  ANCCR:    value of pressing a button = (net contingency between that button
-            and reward minus net contingency between it and a missed reward)
-            times the reward value it predicts: R * (NC_reward - NC_miss).
-  Both use a softmax.
+How each model picks a button (the original models never choose anything)
+  - TD:    a button's value = how good the model expects things to be after
+           pressing it.
+  - ANCCR: a button's value = reward worth x (link to reward - link to miss).
+  - Both then pick with a softmax rule (beta = 5 for TD, 10 for ANCCR).
 
-Run:  py run_experiment.py
-Writes results.json and prints a summary table. Takes a while; lower N_RUNS
-for a quick test.
+What gets measured (per run)
+  - adapt:     trials after the swap before the first stretch of 10 trials with
+               at least 7 presses on the new better button (100 if never).
+  - pre_acc:   share of presses on the better button in the 50 trials before
+               the swap. post_acc: the same for the last 50 trials.
+  - da_good / da_bad: average size of the dopamine signal on rewarded / missed
+               trials, over all 200 trials.
+
+Run it from this folder:  py run_experiment.py   (or python3 on Mac/Linux)
+The full run takes about 6 to 8 minutes. Set N_RUNS = 5 for a quick test.
 """
 import json, os
 import numpy as np
@@ -46,19 +52,30 @@ N_RUNS = 50                                  # runs per model x mood x pair
 MOOD = np.arange(-5, 6)
 RATIOS = 4.0 ** (-MOOD / 5)                  # alpha_minus / alpha_plus
 
-# ---- BeliefTD settings (alpha from the original; gamma inside its 0.5-0.975 sweep) ----
+# ---- TD settings ----
+# alpha (learning rate) is from the original. gamma (how much future rewards
+# matter) is inside the range the original tried (0.5 to 0.975).
+# beta = how strongly the model picks the higher-value button.
 TD_ALPHA, TD_GAMMA, TD_BETA = 0.1, 0.9, 5.0
-HAZARD = 1 / N_TRIALS                        # assumed swap rate, as if estimated from the task
+# Chance of a swap per trial that TD assumes (one swap in 200 trials).
+# Note: TD is given this hint, ANCCR has nothing like it.
+HAZARD = 1 / N_TRIALS
 
-# ---- ANCCR settings (from the original's parameter grid unless noted) ----
-# alpha = 0.1 (the original grid used 0.05) is the contingency ("link") learning
-# rate; mood splits it so alpha_plus + alpha_minus = 0.2, as in the PoC table.
-# alpha_r is the reward-value ("worth") rate; it has no mood split.
+# ---- ANCCR settings (from the original's settings unless noted) ----
+# alpha = learning rate for the "link" (how strongly a button leads to reward).
+# We raised it from 0.05 to 0.1 so both models learn at the same overall speed.
+# Mood splits it so alpha_plus + alpha_minus = 0.2, like TD.
+# alpha_r = learning rate for reward worth. Mood does not touch it.
 ANCCR_PARAMS = dict(alpha=0.1, k=0.05, w=0.5, threshold=0.3, alpha_r=0.1)
-# Memory window T (seconds). The original sets T = 1.2 x mean time between
-# rewards, which here is 2-5 trials long, so a reward gets credited to presses
-# of both buttons. We set T to about one trial instead.
+# Memory window T (seconds). The original sets T = 1.2 x the average time
+# between rewards. Here that is about 1 to 5 trials, so a reward gets credited
+# to presses of both buttons and the model can't tell which one worked.
+# We set T to about one trial instead (3.4 s wait + 6.5 s average gap).
 ANCCR_T = CUE_REWARD_DELAY + 6.5
+# Higher than TD's 5 because the gap between ANCCR's two button values is
+# 2 to 6 times smaller than TD's. With beta = 5 it would pick the better
+# button much less often. (This beta is only for choosing; it is not the
+# beta inside the ANCCR model.)
 ANCCR_BETA = 10.0
 SAMPLING, MIN_RATE = 0.2, 0.001              # as in run_anccr_model.m
 
@@ -161,7 +178,7 @@ def run_anccr(ratio, pair, rng):
 def adapt_trials(choice):
     """Trials after the swap until a 10-trial window picks the new better button >= 70%."""
     post = choice[N_BASE:]
-    for i in range(len(post) - 10):
+    for i in range(len(post) - 9):           # windows starting at 0..90
         if (post[i:i + 10] == 1).mean() >= 0.7:
             return i
     return len(post)
@@ -170,9 +187,11 @@ def adapt_trials(choice):
 def summarise(runner, pair, seed):
     out = []
     for ratio in RATIOS:
-        rng = np.random.default_rng(seed)
         m = dict(pre_acc=[], post_acc=[], adapt=[], da_good=[], da_bad=[])
-        for _ in range(N_RUNS):
+        for run in range(N_RUNS):
+            # one seed per (pair, run): run k sees the same random numbers at every
+            # mood, so moods can be compared run-by-run (paired)
+            rng = np.random.default_rng([seed, run])
             x = runner(ratio, pair, rng)
             m['pre_acc'].append((x['choice'][N_BASE - 50:N_BASE] == 0).mean())
             m['post_acc'].append((x['choice'][-50:] == 1).mean())
@@ -180,8 +199,10 @@ def summarise(runner, pair, seed):
             good, bad = x['da'][x['reward'] == 1], x['da'][x['reward'] == 0]
             m['da_good'].append(np.abs(good).mean() if len(good) else np.nan)
             m['da_bad'].append(np.abs(bad).mean() if len(bad) else np.nan)
-        out.append({k: (float(np.nanmean(v)), float(np.nanstd(v) / np.sqrt(N_RUNS)))
-                    for k, v in m.items()})
+        row = {k: (float(np.nanmean(v)), float(np.nanstd(v) / np.sqrt(N_RUNS)))
+               for k, v in m.items()}
+        row['runs'] = {k: [float(a) for a in v] for k, v in m.items()}  # per-run values, for CIs
+        out.append(row)
     return out
 
 
