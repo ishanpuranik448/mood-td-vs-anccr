@@ -47,6 +47,17 @@ On Mac or Linux, type `python3` instead of `py`.
 - `run_experiment.py` runs everything and saves `code/results.json`. It takes about 6 to 8 minutes. For a quick test, set `N_RUNS = 5`.
 - `make_plots.py` reads `results.json` and saves four figures in `figures/`.
 
+### Fairness checks
+
+The two models are not set up in exactly the same way, so `run_experiment.py` can also rerun everything with one of these changes. Each saves its own `code/results_<name>.json` and leaves `results.json` alone.
+
+```
+py run_experiment.py anccr_beta5       # ANCCR picks with beta = 5, like TD
+py run_experiment.py td_no_hint        # TD is not told that swaps can happen
+py run_experiment.py td_outcome_split  # TD splits learning by reward vs miss, like ANCCR
+py run_experiment.py all_fair          # all three at once
+```
+
 Every run has its own fixed random seed, so you get the same numbers each time. Run k uses the same seed at every mood, so moods can be compared run by run.
 
 ## What's in the folders
@@ -58,6 +69,7 @@ Every run has its own fixed random seed, so you get the same numbers each time. 
 | `code/run_experiment.py` | The task, the settings, and the full experiment |
 | `code/make_plots.py` | Makes the four figures |
 | `code/results.json` | Results: averages plus every run's values |
+| `code/results_<name>.json` | Results of the fairness checks (same format) |
 | `figures/fig1_switching.png` | Trials to switch after the swap, for each mood |
 | `figures/fig2_dopamine.png` | Size of the dopamine signal on rewarded and missed trials |
 | `figures/fig3_best_mood.png` | The fastest mood for each model and reward pair |

@@ -35,8 +35,16 @@ What gets measured (per run)
 
 Run it from this folder:  py run_experiment.py   (or python3 on Mac/Linux)
 The full run takes about 6 to 8 minutes. Set N_RUNS = 5 for a quick test.
+
+Fairness controls (each saves its own results_<name>.json, the main run is untouched)
+  py run_experiment.py anccr_beta5      ANCCR picks with beta = 5, like TD
+  py run_experiment.py td_no_hint       TD is not told swaps can happen (one
+                                        context only, no swap chance)
+  py run_experiment.py td_outcome_split TD splits learning by reward vs miss,
+                                        like ANCCR, not by the sign of the surprise
+  py run_experiment.py all_fair         all three at once
 """
-import json, os
+import json, os, sys
 import numpy as np
 from td_model import BeliefTD
 from anccr_model import ANCCR
@@ -79,6 +87,17 @@ ANCCR_T = CUE_REWARD_DELAY + 6.5
 ANCCR_BETA = 10.0
 SAMPLING, MIN_RATE = 0.2, 0.001              # as in run_anccr_model.m
 
+# ---- fairness controls (see the top of this file) ----
+CONTROLS = {'anccr_beta5', 'td_no_hint', 'td_outcome_split'}
+CONTROL = sys.argv[1] if len(sys.argv) > 1 else 'main'
+ON = CONTROLS if CONTROL == 'all_fair' else {CONTROL} & CONTROLS
+if CONTROL != 'main' and not ON:
+    sys.exit(f"Unknown control '{CONTROL}'. Use one of: {', '.join(sorted(CONTROLS))}, all_fair")
+if 'anccr_beta5' in ON:
+    ANCCR_BETA = TD_BETA
+TD_HINT = 'td_no_hint' not in ON
+TD_SPLIT = 'outcome' if 'td_outcome_split' in ON else 'sign'
+
 
 def split_rates(alpha, ratio):
     """Two learning rates with mean alpha and alpha_minus / alpha_plus = ratio."""
@@ -110,18 +129,24 @@ def softmax_pick(q, beta, rng):
 WAIT_EV, PRESS1, PRESS2, REWARD_EV, NOREWARD_EV = range(5)
 
 
-def td_task_model(pair):
+def td_task_model(pair, hint=True):
+    """hint=False (control): one context only, so TD has no idea that a swap
+    can happen. It is then plain TD over wait / pressed 1 / pressed 2."""
     lo, hi = pair
-    S, E = 6, 5
+    C = 2 if hint else 1
+    S, E = 3 * C, 5
     sid = lambda c, ph: 3 * c + ph
     T, O = np.zeros((S, S)), np.zeros((S, S, E))
-    for c in (0, 1):
-        probs = (hi, lo) if c == 0 else (lo, hi)
+    for c in range(C):
+        # with one context the outcome tells TD nothing about the state, so
+        # any non-zero chance works; 0.5 avoids a zero-chance belief reset
+        probs = ((hi, lo) if c == 0 else (lo, hi)) if hint else (0.5, 0.5)
         for b in (0, 1):
             T[sid(c, 0), sid(c, 1 + b)] = 0.5
             O[sid(c, 0), sid(c, 1 + b), PRESS1 + b] = 1
-            for c2 in (0, 1):
-                T[sid(c, 1 + b), sid(c2, 0)] = 1 - HAZARD if c2 == c else HAZARD
+            for c2 in range(C):
+                stay = 1 - HAZARD if hint else 1.0
+                T[sid(c, 1 + b), sid(c2, 0)] = stay if c2 == c else HAZARD
                 O[sid(c, 1 + b), sid(c2, 0), REWARD_EV] = probs[b]
                 O[sid(c, 1 + b), sid(c2, 0), NOREWARD_EV] = 1 - probs[b]
     return T, O
@@ -129,7 +154,8 @@ def td_task_model(pair):
 
 def run_belief_td(ratio, pair, rng):
     ap, am = split_rates(TD_ALPHA, ratio)
-    agent = BeliefTD(*td_task_model(pair), TD_ALPHA, TD_ALPHA, TD_GAMMA)  # neutral
+    agent = BeliefTD(*td_task_model(pair, TD_HINT), TD_ALPHA, TD_ALPHA, TD_GAMMA,
+                     split=TD_SPLIT)                                       # neutral
     rec = dict(choice=[], reward=[], da=[])
     for t in range(N_TRIALS):
         if t == N_BASE:                          # swap: mood switches on
@@ -138,7 +164,7 @@ def run_belief_td(ratio, pair, rng):
         a = softmax_pick(q, TD_BETA, rng)
         agent.step(PRESS1 + a, 0.0)
         r = float(rng.random() < p_reward(a, t, pair))
-        da = agent.step(REWARD_EV if r else NOREWARD_EV, r)
+        da = agent.step(REWARD_EV if r else NOREWARD_EV, r, outcome=int(r))
         rec['choice'].append(a); rec['reward'].append(r); rec['da'].append(da)
     return {k: np.array(v) for k, v in rec.items()}
 
@@ -208,7 +234,10 @@ def summarise(runner, pair, seed):
 
 if __name__ == '__main__':
     models = {'BeliefTD': run_belief_td, 'ANCCR': run_anccr}
-    results = {'mood': MOOD.tolist(), 'ratios': RATIOS.tolist(), 'pairs': PAIRS}
+    results = {'mood': MOOD.tolist(), 'ratios': RATIOS.tolist(), 'pairs': PAIRS,
+               'control': CONTROL}
+    print(f"Control: {CONTROL}  (ANCCR beta {ANCCR_BETA}, TD swap hint {TD_HINT}, "
+          f"TD split by {TD_SPLIT})")
     for i, pair in enumerate(PAIRS):
         key = f"{int(pair[0] * 100)}-{int(pair[1] * 100)}"
         results[key] = {name: summarise(run, pair, seed=i) for name, run in models.items()}
@@ -219,5 +248,6 @@ if __name__ == '__main__':
                 print(f"  mood {mo:+d}  pre {s['pre_acc'][0]:.2f}  post {s['post_acc'][0]:.2f}  "
                       f"adapt {s['adapt'][0]:5.1f}  |DA good| {s['da_good'][0]:.3f}  "
                       f"|DA bad| {s['da_bad'][0]:.3f}")
-    with open(os.path.join(OUT, 'results.json'), 'w') as f:
+    name = 'results.json' if CONTROL == 'main' else f'results_{CONTROL}.json'
+    with open(os.path.join(OUT, name), 'w') as f:
         json.dump(results, f)
