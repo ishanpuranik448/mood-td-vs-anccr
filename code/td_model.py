@@ -12,6 +12,10 @@ equations follow the original line by line.
 The only change to the maths is mood: alpha_plus is used when the surprise is
 positive (better than expected) and alpha_minus when it is negative (worse than
 expected), instead of one alpha. Set them equal to get the original model back.
+
+Control (split='outcome'): split by what happened instead of by the sign of the
+surprise, like our ANCCR: alpha_plus after a reward, alpha_minus after a miss,
+and the average of the two on every other step.
 """
 import numpy as np
 
@@ -22,8 +26,9 @@ class BeliefTD:
     O[s, s', e]   probability of seeing event e on the move s -> s'
     """
 
-    def __init__(self, T, O, alpha_plus, alpha_minus, gamma):
+    def __init__(self, T, O, alpha_plus, alpha_minus, gamma, split='sign'):
         self.T, self.O = T, O
+        self.split = split               # 'sign' (main) or 'outcome' (control)
         self.ap, self.am, self.gamma = alpha_plus, alpha_minus, gamma
         S = T.shape[0]
         self.b = np.ones(S) / S          # belief state
@@ -42,12 +47,17 @@ class BeliefTD:
     def value(self, b=None):
         return self.w @ (self.b if b is None else b)
 
-    def step(self, e, r):
-        """Observe event e with reward r. Returns the RPE ("dopamine")."""
+    def step(self, e, r, outcome=None):
+        """Observe event e with reward r. Returns the RPE ("dopamine").
+        outcome: 1 = reward, 0 = miss, None = not an outcome (only used when
+        split='outcome')."""
         b0 = self.b                                    # old posterior
         self.b, reset = self.belief_after(e)
         self.resets += reset
         rpe = r + self.w @ (self.gamma * self.b - b0)
-        alpha = self.ap if rpe > 0 else self.am        # mood dial (original: one alpha)
+        if self.split == 'outcome':                    # control: split by reward vs miss
+            alpha = {1: self.ap, 0: self.am}.get(outcome, (self.ap + self.am) / 2)
+        else:                                          # mood dial (original: one alpha)
+            alpha = self.ap if rpe > 0 else self.am
         self.w = self.w + alpha * rpe * b0             # weight update
         return rpe
