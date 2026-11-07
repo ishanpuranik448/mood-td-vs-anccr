@@ -4,19 +4,20 @@ Makes the four figures from results.json (made by run_experiment.py).
   fig1_switching.png   trials to switch after the swap, for each mood.
                        One panel per reward pair. Shaded band = 95% confidence
                        interval (CI) of the average.
-  fig2_dopamine.png    average size of the dopamine signal on rewarded (solid)
-                       and missed (dashed) trials.
-  fig3_best_mood.png   the mood that switches fastest for each pair and model.
-                       Bar = all moods whose average is inside the fastest
-                       mood's 95% CI (about as fast).
-  fig4_vs_neutral.png  change in trials to switch compared with neutral mood,
+  fig2_best_mood.png   the mood that switches fastest for each pair and model.
+                       Bar = all moods that are not clearly slower: each run is
+                       compared with the same run at the fastest mood, and the
+                       95% CI of that difference still includes 0.
+  fig3_vs_neutral.png  change in trials to switch compared with neutral mood,
                        worked out run by run (each run is compared with the same
                        run at mood 0). Main figure of the paper.
+  fig4_dopamine.png    average size of the dopamine signal on rewarded (solid)
+                       and missed (dashed) trials, after the swap only.
 
 How the 95% CI is found: pick 50 runs at random (repeats allowed), take the
 average, do this 2,000 times, and keep the middle 95% of those averages.
 (Older results.json files without per-run values fall back to
-average +/- 1.96 x standard error, and Fig 4 is skipped.)
+average +/- 1.96 x standard error, and Fig 3 is skipped.)
 
 Run it from this folder:  py make_plots.py   (or python3 on Mac/Linux)
 Figures are saved in the figures/ folder next to code/.
@@ -124,20 +125,7 @@ for ax, pair in zip(axs, PAIRS):
             handles.append(h)
 finish(fig, axs, 'trials to switch', 'fig1_switching.png', handles)
 
-# ---- Fig 2: dopamine ----
-fig, axs = panel_grid('Fig 2. Average size of the dopamine (surprise) signal across all 200 trials\n'
-                      'solid = trials that gave a reward, dashed = trials that missed, band = 95% CI')
-handles = []
-for ax, pair in zip(axs, PAIRS):
-    for model, (label, col) in MODELS.items():
-        for key, ls, kind in (('da_good', '-', 'reward'), ('da_bad', '--', 'miss')):
-            h = band(ax, *mean_ci(pair, model, key), col, ls=ls, ms=3.5,
-                     label=f'{label}, {kind}')
-            if pair == PAIRS[0]:
-                handles.append(h)
-finish(fig, axs, '|DA|', 'fig2_dopamine.png', handles)
-
-# ---- Fig 3: best mood per pair ----
+# ---- Fig 2: best mood per pair ----
 fig, ax = plt.subplots(figsize=(8, 5))
 x = np.arange(len(PAIRS))
 offset = {'BeliefTD': -0.15, 'ANCCR': 0.15}
@@ -145,8 +133,15 @@ for model, (label, col) in MODELS.items():
     for i, p in enumerate(PAIRS):
         m, lo, hi = mean_ci(p, model, 'adapt')
         b = int(np.argmin(m))
-        # every mood whose mean falls inside the fastest mood's 95% CI counts as "about as fast"
-        near = MOOD[m <= hi[b]]
+        if HAS_RUNS:
+            # paired: compare each run with the same run at the fastest mood; a mood
+            # counts as "about as fast" if the 95% CI of that difference includes 0
+            xr = runs(p, model, 'adapt')
+            ok = np.array([k == b or boot_ci(xr[k] - xr[b])[0] <= 0
+                           for k in range(len(MOOD))])
+        else:
+            ok = m <= hi[b]                     # fallback: inside the fastest mood's CI
+        near = MOOD[ok]
         ax.plot([x[i] + offset[model]] * 2, [near.min(), near.max()], color=col,
                 lw=6, alpha=0.3, solid_capstyle='round')
         ax.plot(x[i] + offset[model], MOOD[b], ls='none', marker='o', ms=10,
@@ -159,21 +154,21 @@ ax.set_yticks(range(-5, 6))
 ax.set_ylim(-5.6, 5.6)
 ax.set_xlabel('reward pair (rare rewards → common rewards)')
 ax.set_ylabel('mood that switches fastest')
-ax.set_title('Fig 3. Which mood switches fastest, for each model\n'
-             'dot = fastest mood, bar = moods inside its 95% confidence interval',
+ax.set_title('Fig 2. Which mood switches fastest, for each model\n'
+             'dot = fastest mood, bar = moods not clearly slower (paired 95% CI includes 0)',
              loc='left', fontsize=11, color=INK)
 ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
 fig.tight_layout()
-path = os.path.join(OUT, 'fig3_best_mood.png')
+path = os.path.join(OUT, 'fig2_best_mood.png')
 fig.savefig(path, dpi=200)
 plt.close(fig)
 print('saved', os.path.normpath(path))
 
 
-# ---- Fig 4: paired change vs neutral mood (needs per-run values) ----
+# ---- Fig 3: paired change vs neutral mood (needs per-run values) ----
 if HAS_RUNS:
     i0 = int(np.where(MOOD == 0)[0][0])
-    fig, axs = panel_grid('Fig 4. Change in trials to switch compared with neutral mood (below 0 = faster than neutral)\n'
+    fig, axs = panel_grid('Fig 3. Change in trials to switch compared with neutral mood (below 0 = faster than neutral)\n'
                           'each run is compared with the same run at mood 0 (paired); band = 95% CI')
     handles = []
     for ax, pair in zip(axs, PAIRS):
@@ -186,6 +181,21 @@ if HAS_RUNS:
             h = band(ax, d.mean(axis=1), lo, hi, col, label=label)
             if pair == PAIRS[0]:
                 handles.append(h)
-    finish(fig, axs, 'change vs mood 0 (trials)', 'fig4_vs_neutral.png', handles)
+    finish(fig, axs, 'change vs mood 0 (trials)', 'fig3_vs_neutral.png', handles)
 else:
-    print('fig4 skipped: re-run run_experiment.py to save per-run values')
+    print('fig3 skipped: re-run run_experiment.py to save per-run values')
+
+
+# ---- Fig 4: dopamine ----
+fig, axs = panel_grid('Fig 4. Average size of the dopamine (surprise) signal in the 100 trials after the swap\n'
+                      'solid = trials that gave a reward, dashed = trials that missed, band = 95% CI')
+handles = []
+for ax, pair in zip(axs, PAIRS):
+    for model, (label, col) in MODELS.items():
+        for key, ls, kind in (('da_good', '-', 'reward'), ('da_bad', '--', 'miss')):
+            h = band(ax, *mean_ci(pair, model, key), col, ls=ls, ms=3.5,
+                     label=f'{label}, {kind}')
+            if pair == PAIRS[0]:
+                handles.append(h)
+finish(fig, axs, '|DA|', 'fig4_dopamine.png', handles)
+

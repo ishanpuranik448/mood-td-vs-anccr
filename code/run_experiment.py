@@ -31,7 +31,7 @@ What gets measured (per run)
   - pre_acc:   share of presses on the better button in the 50 trials before
                the swap. post_acc: the same for the last 50 trials.
   - da_good / da_bad: average size of the dopamine signal on rewarded / missed
-               trials, over all 200 trials.
+               trials, over the 100 trials after the swap (when mood is on).
 
 Run it from this folder:  py run_experiment.py   (or python3 on Mac/Linux)
 The full run takes about 6 to 8 minutes. Set N_RUNS = 5 for a quick test.
@@ -222,7 +222,9 @@ def summarise(runner, pair, seed):
             m['pre_acc'].append((x['choice'][N_BASE - 50:N_BASE] == 0).mean())
             m['post_acc'].append((x['choice'][-50:] == 1).mean())
             m['adapt'].append(adapt_trials(x['choice']))
-            good, bad = x['da'][x['reward'] == 1], x['da'][x['reward'] == 0]
+            # dopamine after the swap only (mood is off before it)
+            da, rew = x['da'][N_BASE:], x['reward'][N_BASE:]
+            good, bad = da[rew == 1], da[rew == 0]
             m['da_good'].append(np.abs(good).mean() if len(good) else np.nan)
             m['da_bad'].append(np.abs(bad).mean() if len(bad) else np.nan)
         row = {k: (float(np.nanmean(v)), float(np.nanstd(v) / np.sqrt(N_RUNS)))

@@ -71,9 +71,9 @@ Every run has its own fixed random seed, so you get the same numbers each time. 
 | `code/results.json` | Results: averages plus every run's values |
 | `code/results_<name>.json` | Results of the fairness checks (same format) |
 | `figures/fig1_switching.png` | Trials to switch after the swap, for each mood |
-| `figures/fig2_dopamine.png` | Size of the dopamine signal on rewarded and missed trials |
-| `figures/fig3_best_mood.png` | The fastest mood for each model and reward pair |
-| `figures/fig4_vs_neutral.png` | Change in trials to switch compared with neutral mood (main figure) |
+| `figures/fig2_best_mood.png` | The fastest mood for each model and reward pair |
+| `figures/fig3_vs_neutral.png` | Change in trials to switch compared with neutral mood (main figure) |
+| `figures/fig4_dopamine.png` | Size of the dopamine signal on rewarded and missed trials, after the swap |
 
 Shaded bands and bars in the figures are 95% confidence intervals. We get them by re-picking the 50 runs at random 2,000 times.
 
