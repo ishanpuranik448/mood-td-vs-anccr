@@ -43,6 +43,8 @@ Fairness controls (each saves its own results_<name>.json, the main run is untou
   py run_experiment.py td_outcome_split TD splits learning by reward vs miss,
                                         like ANCCR, not by the sign of the surprise
   py run_experiment.py all_fair         all three at once
+  py run_experiment.py td_plain_beta1   plain TD (no swap hint) with beta = 1,
+                                        so it explores enough to switch
 """
 import json, os, sys
 import numpy as np
@@ -90,9 +92,16 @@ SAMPLING, MIN_RATE = 0.2, 0.001              # as in run_anccr_model.m
 # ---- fairness controls (see the top of this file) ----
 CONTROLS = {'anccr_beta5', 'td_no_hint', 'td_outcome_split'}
 CONTROL = sys.argv[1] if len(sys.argv) > 1 else 'main'
-ON = CONTROLS if CONTROL == 'all_fair' else {CONTROL} & CONTROLS
+if CONTROL == 'all_fair':
+    ON = set(CONTROLS)
+elif CONTROL == 'td_plain_beta1':
+    ON = {'td_no_hint'}
+    TD_BETA = 1.0
+else:
+    ON = {CONTROL} & CONTROLS
 if CONTROL != 'main' and not ON:
-    sys.exit(f"Unknown control '{CONTROL}'. Use one of: {', '.join(sorted(CONTROLS))}, all_fair")
+    sys.exit(f"Unknown control '{CONTROL}'. Use one of: "
+             f"{', '.join(sorted(CONTROLS))}, all_fair, td_plain_beta1")
 if 'anccr_beta5' in ON:
     ANCCR_BETA = TD_BETA
 TD_HINT = 'td_no_hint' not in ON
@@ -238,7 +247,7 @@ if __name__ == '__main__':
     models = {'BeliefTD': run_belief_td, 'ANCCR': run_anccr}
     results = {'mood': MOOD.tolist(), 'ratios': RATIOS.tolist(), 'pairs': PAIRS,
                'control': CONTROL}
-    print(f"Control: {CONTROL}  (ANCCR beta {ANCCR_BETA}, TD swap hint {TD_HINT}, "
+    print(f"Control: {CONTROL}  (TD beta {TD_BETA}, ANCCR beta {ANCCR_BETA}, TD swap hint {TD_HINT}, "
           f"TD split by {TD_SPLIT})")
     for i, pair in enumerate(PAIRS):
         key = f"{int(pair[0] * 100)}-{int(pair[1] * 100)}"
