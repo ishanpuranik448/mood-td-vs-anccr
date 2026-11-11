@@ -45,7 +45,7 @@ py make_plots.py
 On Mac or Linux, type `python3` instead of `py`.
 
 - `run_experiment.py` runs everything and saves `code/results.json`. It takes about 6 to 8 minutes. For a quick test, set `N_RUNS = 5`.
-- `make_plots.py` reads `results.json` and saves four figures in `figures/`.
+- `make_plots.py` reads `results.json` and saves five figures in `figures/`.
 
 ### Fairness checks
 
