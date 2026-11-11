@@ -1,5 +1,5 @@
 """
-Makes the four figures from results.json (made by run_experiment.py).
+Makes figures 1 to 5 from results.json (made by run_experiment.py).
 
   fig1_switching.png   trials to switch after the swap, for each mood.
                        One panel per reward pair. Shaded band = 95% confidence
@@ -13,6 +13,10 @@ Makes the four figures from results.json (made by run_experiment.py).
                        run at mood 0). Main figure of the paper.
   fig4_dopamine.png    average size of the dopamine signal on rewarded (solid)
                        and missed (dashed) trials, after the swap only.
+
+  fig5_switched_and_accuracy.png  share of runs that switched at all, and
+                       accuracy in the last 50 trials.
+(fig6_button_values.png is made by make_fig6_values.py.)
 
 How the 95% CI is found: pick 50 runs at random (repeats allowed), take the
 average, do this 2,000 times, and keep the middle 95% of those averages.
@@ -199,3 +203,24 @@ for ax, pair in zip(axs, PAIRS):
                 handles.append(h)
 finish(fig, axs, '|DA|', 'fig4_dopamine.png', handles)
 
+
+
+# ---- Fig 5: did the model really switch? ----
+# "Trials to switch" is capped at 100 and can be passed by luck, so this figure
+# shows two plainer things: the share of runs that switched at all, and how
+# often the model picked the new better button in the last 50 trials.
+if HAS_RUNS:
+    fig, axs = panel_grid('Fig 5. Share of runs that switched (solid) and accuracy in the last 50 trials (dashed)\n'
+                          'band = 95% CI')
+    handles = []
+    for ax, pair in zip(axs, PAIRS):
+        for model, (label, col) in MODELS.items():
+            sw = (runs(pair, model, 'adapt') < 100).astype(float)   # 100 = never switched
+            acc = runs(pair, model, 'post_acc')
+            for x, ls, kind in ((sw, '-', 'runs that switched'), (acc, '--', 'final accuracy')):
+                lo, hi = np.array([boot_ci(v) for v in x]).T
+                h = band(ax, x.mean(axis=1), lo, hi, col, ls=ls, ms=3.5, label=f'{label}, {kind}')
+                if pair == PAIRS[0]:
+                    handles.append(h)
+        ax.set_ylim(0, 1.05)
+    finish(fig, axs, 'share (0 to 1)', 'fig5_switched_and_accuracy.png', handles)
