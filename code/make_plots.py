@@ -42,13 +42,13 @@ MOOD = np.array(R['mood'])
 
 # panels ordered from rarest to most common rewards
 PAIRS = ['0-50', '10-60', '20-70', '30-80', '40-90', '50-100']
-MODELS = {'BeliefTD': ('TD (belief state)', '#2a78d6'),
-          'ANCCR': ('ANCCR', '#eb6834')}
+# same look as Fig 6 (make_fig6_values.py): grey and green, black axes, no title in the image
+MODELS = {'BeliefTD': ('TD (belief state)', '#898781'),
+          'ANCCR': ('ANCCR', '#1a9b5f')}
 INK, MUTED, GRID = '#0b0b0b', '#898781', '#e1e0d9'
 
 plt.rcParams.update({
-    'font.size': 10, 'axes.edgecolor': '#c3c2b7', 'axes.labelcolor': INK,
-    'xtick.color': MUTED, 'ytick.color': MUTED, 'axes.spines.top': False,
+    'font.size': 10, 'axes.spines.top': False,
     'axes.spines.right': False, 'axes.grid': True, 'grid.color': GRID,
     'grid.linewidth': 0.6, 'figure.facecolor': 'white', 'axes.facecolor': 'white',
     'legend.frameon': False,
@@ -90,12 +90,12 @@ def mean_ci(pair, model, key):
 
 def band(ax, m, lo, hi, col, ls='-', label=None, ms=4):
     ax.fill_between(MOOD, lo, hi, color=col, alpha=0.18, lw=0)
-    return ax.plot(MOOD, m, color=col, lw=2, ls=ls, marker='o', ms=ms, label=label)[0]
+    return ax.plot(MOOD, m, color=col, lw=2, ls=ls, label=label)[0]
 
 
 def panel_grid(title):
     fig, axes = plt.subplots(2, 3, figsize=(11, 7), sharex=True, sharey=True)
-    fig.suptitle(title, x=0.01, ha='left', fontsize=12, color=INK)
+    # the title is kept here as a note for the code only; captions live in the paper
     return fig, axes.ravel()
 
 
@@ -104,14 +104,14 @@ def finish(fig, ax_list, ylabel, name, legend_handles):
         lo, hi = pair.split('-')
         ax.set_title(f'{lo}% vs {hi}%', fontsize=10, color=INK, loc='left')
         ax.set_xticks([-5, -3, -1, 0, 1, 3, 5])
-        ax.axvline(0, color='#c3c2b7', lw=0.8, zorder=0)
+        ax.axvline(0, color=INK, lw=0.8, ls=':', zorder=0)
     for ax in ax_list[3:]:
         ax.set_xlabel('mood (−5 sad … +5 happy)')
     for ax in ax_list[::3]:
         ax.set_ylabel(ylabel)
     fig.legend(handles=legend_handles, loc='lower center', ncol=len(legend_handles),
                bbox_to_anchor=(0.5, 0.0), handlelength=3)
-    fig.tight_layout(rect=(0, 0.06, 1, 0.96))
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
     path = os.path.join(OUT, name)
     fig.savefig(path, dpi=200)
     plt.close(fig)
@@ -151,16 +151,13 @@ for model, (label, col) in MODELS.items():
         ax.plot(x[i] + offset[model], MOOD[b], ls='none', marker='o', ms=10,
                 color=col, markeredgecolor='white', markeredgewidth=2,
                 label=label if i == 0 else None)
-ax.axhline(0, color='#c3c2b7', lw=0.8, zorder=0)
+ax.axhline(0, color=INK, lw=0.8, ls=':', zorder=0)
 ax.set_xticks(x)
 ax.set_xticklabels([p.replace('-', '% vs ') + '%' for p in PAIRS])
 ax.set_yticks(range(-5, 6))
 ax.set_ylim(-5.6, 5.6)
 ax.set_xlabel('reward pair (rare rewards → common rewards)')
 ax.set_ylabel('mood that switches fastest')
-ax.set_title('Fig 2. Which mood switches fastest, for each model\n'
-             'dot = fastest mood, bar = moods not clearly slower (paired 95% CI includes 0)',
-             loc='left', fontsize=11, color=INK)
 ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
 fig.tight_layout()
 path = os.path.join(OUT, 'fig2_best_mood.png')
@@ -176,7 +173,7 @@ if HAS_RUNS:
                           'each run is compared with the same run at mood 0 (paired); band = 95% CI')
     handles = []
     for ax, pair in zip(axs, PAIRS):
-        ax.axhline(0, color='#c3c2b7', lw=0.8, zorder=0)
+        ax.axhline(0, color=INK, lw=0.8, ls=':', zorder=0)
         for model, (label, col) in MODELS.items():
             x = runs(pair, model, 'adapt')
             d = x - x[i0]                       # paired difference, per run
@@ -191,7 +188,7 @@ else:
 
 
 # ---- Fig 4: dopamine ----
-fig, axs = panel_grid('Fig 4. Average size of the dopamine (surprise) signal in the 100 trials after the swap\n'
+fig, axs = panel_grid('Fig 4. Average size of the dopamine signal in the 100 trials after the swap\n'
                       'solid = trials that gave a reward, dashed = trials that missed, band = 95% CI')
 handles = []
 for ax, pair in zip(axs, PAIRS):
