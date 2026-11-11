@@ -60,6 +60,38 @@ py run_experiment.py all_fair          # all three at once
 
 Every run has its own fixed random seed, so you get the same numbers each time. Run k uses the same seed at every mood, so moods can be compared run by run.
 
+### Checks added after the second review
+
+```
+py run_experiment.py mood_from_start   # mood is on from trial 1, not from the swap
+py run_experiment.py long_post         # 300 trials after the swap instead of 100
+py run_experiment.py sym_slow          # no mood, both learning rates 0.04
+py run_experiment.py sym_fast          # no mood, both learning rates 0.16
+py run_experiment.py td_beta_matched   # TD with beta 1.6 (about as random as ANCCR)
+py run_experiment.py td_wrong_probs    # TD is given reward chances that are 10 points wrong
+py run_experiment.py td_plain_beta2    # plain TD (no swap hint) with beta 2
+py run_experiment.py td_plain_beta3    # plain TD (no swap hint) with beta 3
+py run_experiment.py factor2           # weaker mood dial (4 in the formula becomes 2)
+py run_experiment.py factor8           # stronger mood dial (4 becomes 8)
+py run_experiment.py anccr_T_half      # ANCCR memory window halved
+py run_experiment.py anccr_T_double    # ANCCR memory window doubled
+py run_experiment.py runs200           # 200 runs instead of 50 (slow)
+```
+
+Each one saves `code/results_<name>.json`. What they showed:
+
+- Low mood does not make a typical TD run faster. It stops TD from getting stuck on the old
+  button (at 40/90, 100% of runs switched at mood -5, 76% at neutral, 40% at +5).
+- ANCCR almost always switches, but a typical run is much slower at low mood.
+- The same pattern holds with mood on from trial 1, with wrong reward chances for TD, with a
+  weaker or stronger mood dial and with a shorter or longer ANCCR memory window.
+- Plain TD with beta 2 or 3 also gets stuck less at low mood, so this does not need the swap hint.
+- With beta 1.6, TD almost never gets stuck and mood barely matters, so the TD result depends
+  on TD choosing almost greedily.
+
+`py make_fig6_values.py` draws what each model thinks the two buttons are worth over time.
+
+
 ## What's in the folders
 
 | File | What it is |
@@ -72,8 +104,10 @@ Every run has its own fixed random seed, so you get the same numbers each time. 
 | `code/results_<name>.json` | Results of the fairness checks (same format) |
 | `figures/fig1_switching.png` | Trials to switch after the swap, for each mood |
 | `figures/fig2_best_mood.png` | The fastest mood for each model and reward pair |
-| `figures/fig3_vs_neutral.png` | Change in trials to switch compared with neutral mood (main figure) |
+| `figures/fig3_vs_neutral.png` | Change in trials to switch compared with neutral mood |
 | `figures/fig4_dopamine.png` | Size of the dopamine signal on rewarded and missed trials, after the swap |
+| `figures/fig5_switched_and_accuracy.png` | Share of runs that switched, and accuracy in the last 50 trials |
+| `figures/fig6_button_values.png` | Button values over time at mood -5, 0 and +5 (30/80) |
 
 Shaded bands and bars in the figures are 95% confidence intervals. We get them by re-picking the 50 runs at random 2,000 times.
 
