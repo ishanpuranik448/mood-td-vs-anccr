@@ -45,6 +45,19 @@ Fairness controls (each saves its own results_<name>.json, the main run is untou
   py run_experiment.py all_fair         all three at once
   py run_experiment.py td_plain_beta1   plain TD (no swap hint) with beta = 1,
                                         so it explores enough to switch
+
+More checks (added after review, same idea, see CHECKS below for the full list)
+  py run_experiment.py mood_from_start  mood is on from trial 1, not only after the swap
+  py run_experiment.py sym_slow         no mood: both learning rates 0.04
+  py run_experiment.py sym_fast         no mood: both learning rates 0.16
+  py run_experiment.py td_beta_matched  TD picks with beta = 1.6, so its choices are
+                                        about as random as ANCCR's
+  py run_experiment.py td_wrong_probs   TD is told reward chances that are 10 points off
+  py run_experiment.py td_plain_beta2   plain TD with beta = 2   (also td_plain_beta3)
+  py run_experiment.py long_post        300 trials after the swap instead of 100
+  py run_experiment.py runs200          200 runs instead of 50
+  py run_experiment.py anccr_T_half     ANCCR memory window of half a trial (also anccr_T_double)
+  py run_experiment.py factor2          mood changes the ratio by up to 2x (also factor8)
 """
 import json, os, sys
 import numpy as np
@@ -69,7 +82,7 @@ RATIOS = 4.0 ** (-MOOD / 5)                  # alpha_minus / alpha_plus
 TD_ALPHA, TD_GAMMA, TD_BETA = 0.1, 0.9, 5.0
 # Chance of a swap per trial that TD assumes (one swap in 200 trials).
 # Note: TD is given this hint, ANCCR has nothing like it.
-HAZARD = 1 / N_TRIALS
+HAZARD = 1 / 200
 
 # ---- ANCCR settings (from the original's settings unless noted) ----
 # alpha = learning rate for the "link" (how strongly a button leads to reward).
@@ -92,16 +105,43 @@ SAMPLING, MIN_RATE = 0.2, 0.001              # as in run_anccr_model.m
 # ---- fairness controls (see the top of this file) ----
 CONTROLS = {'anccr_beta5', 'td_no_hint', 'td_outcome_split'}
 CONTROL = sys.argv[1] if len(sys.argv) > 1 else 'main'
+
+# Settings the extra checks can change (the main run uses these defaults).
+MOOD_ON = N_BASE          # trial where mood switches on (0 = from the start)
+SYM_RATE = None           # if set: no mood, both learning rates equal this
+TD_PROB_SHIFT = 0.0       # TD is told chances this far off (low + shift, high - shift)
+FACTOR = 4.0              # mood changes alpha_minus / alpha_plus by up to this much
+RUN_MODELS = ('BeliefTD', 'ANCCR')
+
+# name -> (fairness controls switched on, settings changed)
+CHECKS = {
+    'td_plain_beta1': ({'td_no_hint'}, dict(TD_BETA=1.0)),
+    'td_plain_beta2': ({'td_no_hint'}, dict(TD_BETA=2.0, RUN_MODELS=('BeliefTD',))),
+    'td_plain_beta3': ({'td_no_hint'}, dict(TD_BETA=3.0, RUN_MODELS=('BeliefTD',))),
+    'td_beta_matched': (set(), dict(TD_BETA=1.6, RUN_MODELS=('BeliefTD',))),
+    'td_wrong_probs': (set(), dict(TD_PROB_SHIFT=0.1, RUN_MODELS=('BeliefTD',))),
+    'mood_from_start': (set(), dict(MOOD_ON=0)),
+    'sym_slow': (set(), dict(SYM_RATE=0.04, MOOD=np.array([0]))),
+    'sym_fast': (set(), dict(SYM_RATE=0.16, MOOD=np.array([0]))),
+    'long_post': (set(), dict(N_POST=300)),
+    'runs200': (set(), dict(N_RUNS=200)),
+    'anccr_T_half': (set(), dict(ANCCR_T=ANCCR_T / 2, RUN_MODELS=('ANCCR',))),
+    'anccr_T_double': (set(), dict(ANCCR_T=ANCCR_T * 2, RUN_MODELS=('ANCCR',))),
+    'factor2': (set(), dict(FACTOR=2.0)),
+    'factor8': (set(), dict(FACTOR=8.0)),
+}
 if CONTROL == 'all_fair':
     ON = set(CONTROLS)
-elif CONTROL == 'td_plain_beta1':
-    ON = {'td_no_hint'}
-    TD_BETA = 1.0
+elif CONTROL in CHECKS:
+    ON, changes = CHECKS[CONTROL]
+    globals().update(changes)
+    N_TRIALS = N_BASE + N_POST
+    RATIOS = FACTOR ** (-MOOD / 5)
 else:
     ON = {CONTROL} & CONTROLS
-if CONTROL != 'main' and not ON:
+if CONTROL != 'main' and not ON and CONTROL not in CHECKS:
     sys.exit(f"Unknown control '{CONTROL}'. Use one of: "
-             f"{', '.join(sorted(CONTROLS))}, all_fair, td_plain_beta1")
+             f"{', '.join(sorted(CONTROLS))}, all_fair, {', '.join(CHECKS)}")
 if 'anccr_beta5' in ON:
     ANCCR_BETA = TD_BETA
 TD_HINT = 'td_no_hint' not in ON
@@ -141,7 +181,7 @@ WAIT_EV, PRESS1, PRESS2, REWARD_EV, NOREWARD_EV = range(5)
 def td_task_model(pair, hint=True):
     """hint=False (control): one context only, so TD has no idea that a swap
     can happen. It is then plain TD over wait / pressed 1 / pressed 2."""
-    lo, hi = pair
+    lo, hi = pair[0] + TD_PROB_SHIFT, pair[1] - TD_PROB_SHIFT
     C = 2 if hint else 1
     S, E = 3 * C, 5
     sid = lambda c, ph: 3 * c + ph
@@ -163,11 +203,13 @@ def td_task_model(pair, hint=True):
 
 def run_belief_td(ratio, pair, rng):
     ap, am = split_rates(TD_ALPHA, ratio)
+    if SYM_RATE is not None:
+        ap = am = SYM_RATE
     agent = BeliefTD(*td_task_model(pair, TD_HINT), TD_ALPHA, TD_ALPHA, TD_GAMMA,
                      split=TD_SPLIT)                                       # neutral
     rec = dict(choice=[], reward=[], da=[])
     for t in range(N_TRIALS):
-        if t == N_BASE:                          # swap: mood switches on
+        if t == MOOD_ON:                         # mood switches on (at the swap in the main run)
             agent.ap, agent.am = ap, am
         q = [agent.value(agent.belief_after(PRESS1 + b)[0]) for b in (0, 1)]
         a = softmax_pick(q, TD_BETA, rng)
@@ -186,6 +228,8 @@ A_PRESS1, A_PRESS2, A_REWARD, A_OMIT = range(4)
 def run_anccr(ratio, pair, rng):
     p = ANCCR_PARAMS
     ap, am = split_rates(p['alpha'], ratio)
+    if SYM_RATE is not None:
+        ap = am = SYM_RATE
     agent = ANCCR(4, ANCCR_T, p['alpha'], p['k'], SAMPLING, p['w'], p['threshold'],
                   MIN_RATE, beta=[0, 0, 1, 0], alpha_r_plus=p['alpha_r'],
                   alpha_r_minus=p['alpha_r'], omidx=[A_OMIT, A_REWARD])  # neutral
@@ -195,7 +239,7 @@ def run_anccr(ratio, pair, rng):
     rec = dict(choice=[], reward=[], da=[])
     now = 0.0
     for t in range(N_TRIALS):
-        if t == N_BASE:                          # swap: mood switches on
+        if t == MOOD_ON:                         # mood switches on (at the swap in the main run)
             agent.ap, agent.am = ap, am
         q = [agent.R[b, A_REWARD] * (agent.NC[b, A_REWARD] - agent.NC[b, A_OMIT])
              for b in (0, 1)]
@@ -210,11 +254,12 @@ def run_anccr(ratio, pair, rng):
 
 
 # ---- measures ----
-def adapt_trials(choice):
-    """Trials after the swap until a 10-trial window picks the new better button >= 70%."""
+def adapt_trials(choice, need=7):
+    """Trials after the swap until a 10-trial window has at least `need` presses
+    on the new better button (the paper uses 7; 6 and 8 are saved as a check)."""
     post = choice[N_BASE:]
     for i in range(len(post) - 9):           # windows starting at 0..90
-        if (post[i:i + 10] == 1).mean() >= 0.7:
+        if (post[i:i + 10] == 1).sum() >= need:
             return i
     return len(post)
 
@@ -222,7 +267,8 @@ def adapt_trials(choice):
 def summarise(runner, pair, seed):
     out = []
     for ratio in RATIOS:
-        m = dict(pre_acc=[], post_acc=[], adapt=[], da_good=[], da_bad=[])
+        m = dict(pre_acc=[], post_acc=[], adapt=[], da_good=[], da_bad=[],
+                 adapt6=[], adapt8=[], da_bad_old=[], da_good_new=[])
         for run in range(N_RUNS):
             # one seed per (pair, run): run k sees the same random numbers at every
             # mood, so moods can be compared run-by-run (paired)
@@ -236,6 +282,16 @@ def summarise(runner, pair, seed):
             good, bad = da[rew == 1], da[rew == 0]
             m['da_good'].append(np.abs(good).mean() if len(good) else np.nan)
             m['da_bad'].append(np.abs(bad).mean() if len(bad) else np.nan)
+            # the same switch measure with a looser / stricter rule
+            m['adapt6'].append(adapt_trials(x['choice'], 6))
+            m['adapt8'].append(adapt_trials(x['choice'], 8))
+            # dopamine split by button, so it does not depend on which button
+            # the model happened to press more: misses on the old button and
+            # rewards on the new button
+            ch = x['choice'][N_BASE:]
+            bo, gn = da[(rew == 0) & (ch == 0)], da[(rew == 1) & (ch == 1)]
+            m['da_bad_old'].append(np.abs(bo).mean() if len(bo) else np.nan)
+            m['da_good_new'].append(np.abs(gn).mean() if len(gn) else np.nan)
         row = {k: (float(np.nanmean(v)), float(np.nanstd(v) / np.sqrt(N_RUNS)))
                for k, v in m.items()}
         row['runs'] = {k: [float(a) for a in v] for k, v in m.items()}  # per-run values, for CIs
@@ -245,6 +301,7 @@ def summarise(runner, pair, seed):
 
 if __name__ == '__main__':
     models = {'BeliefTD': run_belief_td, 'ANCCR': run_anccr}
+    models = {k: v for k, v in models.items() if k in RUN_MODELS}
     results = {'mood': MOOD.tolist(), 'ratios': RATIOS.tolist(), 'pairs': PAIRS,
                'control': CONTROL}
     print(f"Control: {CONTROL}  (TD beta {TD_BETA}, ANCCR beta {ANCCR_BETA}, TD swap hint {TD_HINT}, "
